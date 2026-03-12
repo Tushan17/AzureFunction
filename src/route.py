@@ -16,7 +16,8 @@ def optimize_route(
     Parameters
     ----------
     start            : {"lat": float, "lon": float}
-    legs             : [{"lat": float, "lon": float}, ...] intermediate stops
+    legs             : [{"id": int, "lat": float, "lon": float}, ...] intermediate stops
+                       The "id" field is required and preserved in the output.
     end              : {"lat": float, "lon": float}
     subscription_key : Azure Maps key. Falls back to AZURE_MAPS_KEY env var.
 
