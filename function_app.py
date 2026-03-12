@@ -55,8 +55,8 @@ def optimizeRouteFunc(req: func.HttpRequest) -> func.HttpResponse:
     {
         "start": {"lat": 52.36006, "lon": 4.85106},
         "legs":  [
-            {"lat": 52.36187, "lon": 4.90736},
-            {"lat": 52.38105, "lon": 4.89391}
+            {"id": 1, "lat": 52.36187, "lon": 4.90736},
+            {"id": 2, "lat": 52.38105, "lon": 4.89391}
         ],
         "end":   {"lat": 52.37628, "lon": 4.90765}
     }
@@ -64,8 +64,8 @@ def optimizeRouteFunc(req: func.HttpRequest) -> func.HttpResponse:
     Returns JSON:
     {
         "optimizedLegs": [
-            {"lat": 52.38105, "lon": 4.89391, "originalIndex": 1},
-            {"lat": 52.36187, "lon": 4.90736, "originalIndex": 0}
+            {"id": 2, "lat": 52.38105, "lon": 4.89391, "originalIndex": 1},
+            {"id": 1, "lat": 52.36187, "lon": 4.90736, "originalIndex": 0}
         ],
         "totalDistanceMeters": 12540,
         "totalTravelTimeSeconds": 620
@@ -112,6 +112,18 @@ def optimizeRouteFunc(req: func.HttpRequest) -> func.HttpResponse:
         if not isinstance(leg, dict) or "lat" not in leg or "lon" not in leg:
             return func.HttpResponse(
                 body=json.dumps({"error": f"legs[{i}] must be an object with 'lat' and 'lon'."}),
+                status_code=400,
+                mimetype="application/json",
+            )
+        if "id" not in leg:
+            return func.HttpResponse(
+                body=json.dumps({"error": f"legs[{i}] is missing required field 'id'."}),
+                status_code=400,
+                mimetype="application/json",
+            )
+        if not isinstance(leg["id"], int):
+            return func.HttpResponse(
+                body=json.dumps({"error": f"legs[{i}].id must be an integer."}),
                 status_code=400,
                 mimetype="application/json",
             )
