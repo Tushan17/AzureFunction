@@ -56,13 +56,15 @@ def optimize_route(
     summary = route["summary"]
 
     # optimizedWaypoints covers only the intermediate stops (legs), not start/end.
-    # Each entry: {"providedIndex": <original 0-based>, "optimizedIndex": <new position>}
+    # Per Azure Maps docs, providedIndex and optimizedIndex are 1-based within the
+    # full query (origin = 0), so leg[0] has providedIndex=1, leg[1] has providedIndex=2, etc.
+    # We subtract 1 to convert back to a 0-based index into the legs list.
     optimized_waypoints = route.get("optimizedWaypoints", [])
 
     if optimized_waypoints:
         sorted_waypoints = sorted(optimized_waypoints, key=lambda w: w["optimizedIndex"])
         optimized_legs = [
-            {**legs[w["providedIndex"]], "originalIndex": w["providedIndex"]}
+            {**legs[w["providedIndex"] - 1], "originalIndex": w["providedIndex"] - 1}
             for w in sorted_waypoints
         ]
     else:
