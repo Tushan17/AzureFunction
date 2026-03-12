@@ -1,5 +1,8 @@
 import azure.functions as func
 import logging
+import json
+
+from src.route import optimize_route
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
@@ -23,3 +26,114 @@ def firstFunc(req: func.HttpRequest) -> func.HttpResponse:
              "This HTTP triggered function executed successfully. Pass a name in the query string or in the request body for a personalized response.",
              status_code=200
         )
+
+@app.route(route="secondFunc")
+def secondFunc(req: func.HttpRequest) -> func.HttpResponse:
+    name = req.get_json().get('name') if req.get_json(silent=True) else None
+    if name:
+        return func.HttpResponse(
+            body=f"Hello, {name}. This is the second function. It executed successfully.", 
+            status_code=200, 
+            mimetype="text/plain", 
+            charset="utf-8", 
+            headers={"Custom-Header": "CustomValue"})
+
+    return func.HttpResponse(
+        body="This is the second function. It executed successfully.", 
+        status_code=200, 
+        mimetype="text/plain", 
+        charset="utf-8", 
+        headers={"Custom-Header": "CustomValue"})
+
+
+@app.route(route="optimizeRoute", methods=["POST"])
+def optimizeRouteFunc(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Azure Maps route optimisation endpoint.
+
+    Expected JSON body:
+    {
+        "start": {"lat": 52.36006, "lon": 4.85106},
+        "legs":  [
+            {"lat": 52.36187, "lon": 4.90736},
+            {"lat": 52.38105, "lon": 4.89391}
+        ],
+        "end":   {"lat": 52.37628, "lon": 4.90765}
+    }
+
+    Returns JSON:
+    {
+        "optimizedLegs": [
+            {"lat": 52.38105, "lon": 4.89391, "originalIndex": 1},
+            {"lat": 52.36187, "lon": 4.90736, "originalIndex": 0}
+        ],
+        "totalDistanceMeters": 12540,
+        "totalTravelTimeSeconds": 620
+    }
+    """
+    logging.info('optimizeRoute function received a request.')
+
+    try:
+        body = req.get_json()
+    except ValueError:
+        return func.HttpResponse(
+            body=json.dumps({"error": "Request body must be valid JSON."}),
+            status_code=400,
+            mimetype="application/json",
+        )
+
+    start = body.get("start")
+    legs  = body.get("legs")
+    end   = body.get("end")
+
+    if start is None or legs is None or end is None:
+        return func.HttpResponse(
+            body=json.dumps({"error": "'start', 'legs', and 'end' are required fields."}),
+            status_code=400,
+            mimetype="application/json",
+        )
+
+    if not isinstance(legs, list):
+        return func.HttpResponse(
+            body=json.dumps({"error": "'legs' must be an array."}),
+            status_code=400,
+            mimetype="application/json",
+        )
+
+    for field, value in [("start", start), ("end", end)]:
+        if not isinstance(value, dict) or "lat" not in value or "lon" not in value:
+            return func.HttpResponse(
+                body=json.dumps({"error": f"'{field}' must be an object with 'lat' and 'lon'."}),
+                status_code=400,
+                mimetype="application/json",
+            )
+
+    for i, leg in enumerate(legs):
+        if not isinstance(leg, dict) or "lat" not in leg or "lon" not in leg:
+            return func.HttpResponse(
+                body=json.dumps({"error": f"legs[{i}] must be an object with 'lat' and 'lon'."}),
+                status_code=400,
+                mimetype="application/json",
+            )
+
+    try:
+        result = optimize_route(start, legs, end)
+    except ValueError as exc:
+        return func.HttpResponse(
+            body=json.dumps({"error": str(exc)}),
+            status_code=500,
+            mimetype="application/json",
+        )
+    except Exception as exc:
+        logging.exception("Azure Maps call failed.")
+        return func.HttpResponse(
+            body=json.dumps({"error": "Route optimisation failed.", "detail": str(exc)}),
+            status_code=502,
+            mimetype="application/json",
+        )
+
+    return func.HttpResponse(
+        body=json.dumps(result),
+        status_code=200,
+        mimetype="application/json",
+    )
