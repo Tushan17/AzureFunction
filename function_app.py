@@ -2,7 +2,10 @@ import azure.functions as func
 import logging
 import json
 
+from lxml import etree
+
 from src.route import optimize_route
+from src.xml_processor import validate_and_parse_order
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
@@ -146,6 +149,71 @@ def optimizeRouteFunc(req: func.HttpRequest) -> func.HttpResponse:
 
     return func.HttpResponse(
         body=json.dumps(result),
+        status_code=200,
+        mimetype="application/json",
+    )
+
+
+@app.route(route="processXml", methods=["POST"])
+def processXmlFunc(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Validate and process an XML Order document against the stored XSD schema.
+
+    Expected request body: an XML document conforming to schemas/order.xsd.
+
+    Example request body:
+    <?xml version="1.0" encoding="UTF-8"?>
+    <Order>
+      <OrderId>ORD-001</OrderId>
+      <CustomerName>Jane Doe</CustomerName>
+      <OrderDate>2024-03-15</OrderDate>
+      <Items>
+        <Item>
+          <ProductId>PROD-42</ProductId>
+          <ProductName>Widget</ProductName>
+          <Quantity>3</Quantity>
+          <UnitPrice>9.99</UnitPrice>
+        </Item>
+      </Items>
+    </Order>
+
+    Returns JSON with the parsed order including computed line totals and
+    the overall order total.
+    """
+    logging.info("processXml function received a request.")
+
+    xml_bytes = req.get_body()
+    if not xml_bytes:
+        return func.HttpResponse(
+            body=json.dumps({"error": "Request body must be a non-empty XML document."}),
+            status_code=400,
+            mimetype="application/json",
+        )
+
+    try:
+        order = validate_and_parse_order(xml_bytes)
+    except etree.XMLSyntaxError as exc:
+        return func.HttpResponse(
+            body=json.dumps({"error": str(exc)}),
+            status_code=400,
+            mimetype="application/json",
+        )
+    except ValueError as exc:
+        return func.HttpResponse(
+            body=json.dumps({"error": str(exc)}),
+            status_code=422,
+            mimetype="application/json",
+        )
+    except Exception as exc:
+        logging.exception("Unexpected error while processing XML.")
+        return func.HttpResponse(
+            body=json.dumps({"error": "XML processing failed.", "detail": str(exc)}),
+            status_code=500,
+            mimetype="application/json",
+        )
+
+    return func.HttpResponse(
+        body=json.dumps(order),
         status_code=200,
         mimetype="application/json",
     )
